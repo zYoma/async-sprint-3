@@ -1,11 +1,12 @@
 
 import asyncio
-from asyncio.streams import StreamReader, StreamWriter
 import logging
+from asyncio.streams import StreamReader, StreamWriter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from conf import get_server_socket, config_logging, LAST_MES_COUNT, EMPTY_MESSAGE, LIMIT_MES_HOUR, PERIOD_MES_HOUR
 
+from conf import (EMPTY_MESSAGE, LAST_MES_COUNT, LIMIT_MES_HOUR,
+                  PERIOD_MES_HOUR, config_logging, get_server_socket)
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,6 @@ class Server:
         self.root_chat: list[Message] = list()
         self.client_ref = dict()
         self.private_chats = dict()  # {id клиента: [{'id': id собеседника, 'mes': [список сообщений], last_read: index}]
-
 
     async def _init_client(self, reader: StreamReader, writer: StreamWriter):
         # идентифицируем юзера по порту к которому он подключился и сохраняем данные о нем
@@ -87,10 +87,8 @@ class Server:
         # добавляем к сообщению id клиента
         data = f'({from_user}): {data}' if from_user else data
         data += '\n'
-        [writer.write(chunk.encode()) for chunk in self._chunked(1024, data)]
-
-        # writer.write(data.encode())
-        # await writer.drain()
+        writer.write(data.encode())
+        await writer.drain()
 
     def _save_message(self, client_id, message):
         # сохраняем сообщение в чате только если оно не пустое
@@ -110,6 +108,7 @@ class Server:
                 case "file":
                     logger.info(f'Клиент {client_id} отправил файл.')
                     file = await self._read_file(client_id)
+                    await self._send_to_root_chat(client_id, '/file')
                     await self._send_to_root_chat(client_id, file.decode())
                 case _:
                     await self._send_data(data='Не верная команда!\n', client_id=client_id, from_user='server')
@@ -126,16 +125,8 @@ class Server:
             data += chunk
             if len(chunk) < 1024:
                 break
-            # if b'end-file' in chunk:   # тут явно можно лучше конец файла отслеживать
-            #     data = data.replace(b'end-file', b'')
-            #     break
-        print(len(data))
-        return data
 
-    @staticmethod
-    def _chunked(size, source):
-        for i in range(0, len(source), size):
-            yield source[i:i + size]
+        return data
 
     async def _send_file_to_root(self, file):
         pass

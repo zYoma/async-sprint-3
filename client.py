@@ -1,15 +1,12 @@
 import asyncio
-from optparse import OptionParser
-import aioconsole as aioconsole
-import threading
 import logging
-import sys
-import asyncio
-from conf import get_server_socket, config_logging
-from io import BytesIO
 
+import aioconsole as aioconsole
+
+from conf import config_logging, get_server_socket
 
 logger = logging.getLogger(__name__)
+lock = asyncio.Lock()
 
 
 class Client:
@@ -25,8 +22,34 @@ class Client:
             data = await self.reader.read(1024)
             if not data:
                 break
+            # Если в переданных файлах есть файл, то определяем его начало и начинаем получать оставшуюся часть
+            if '/file' in data.decode():
+                mes_with_file = data.decode().split('/file')
+                file_part_1 = mes_with_file[-1]
+                mes = mes_with_file[0]
+                print(mes)
+                file = await self._read_file()
+                # пишем в файл в отдельном потоке
+                await asyncio.to_thread(self._write_file, file_part_1.encode() + file)
+            else:
+                print(data.decode())
 
-            print(data.decode())
+    async def _read_file(self):
+        # вычитываем файл чанками
+        data = bytearray()
+        while True:
+            chunk = await self.reader.read(1024)
+            data += chunk
+            if len(chunk) < 1024:
+                break
+
+        return data
+
+    @staticmethod
+    def _write_file(file):
+        # тут хардкод просто для примера
+        with open('tmp/2', 'wb') as f:
+            f.write(file)
 
     async def start(self):
         while True:
@@ -34,15 +57,13 @@ class Client:
                 break
             message = await aioconsole.ainput('>')
             self.writer.write(message.encode())
+            await self.writer.drain()
             # Если нужно отправить файл
             if message.startswith('/file'):
                 filepath = message.split()[1]
                 file = await asyncio.to_thread(self._open_file, filepath)
-                print(len(file))
-                for chunk in self._chunked(1024, file):
-                    self.writer.write(chunk)
-
-                # self.writer.write(b'end-file')
+                self.writer.write(file)
+                await self.writer.drain()
 
         self.writer.close()
         logger.info('Сервер разорвал соединение')
@@ -54,11 +75,6 @@ class Client:
                 return f.read()
         except FileNotFoundError:
             return None
-
-    @staticmethod
-    def _chunked(size, source):
-        for i in range(0, len(source), size):
-            yield source[i:i + size]
 
 
 async def main(host, port):
