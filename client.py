@@ -19,18 +19,14 @@ class Client:
 
     async def _read(self):
         while True:
-            data = await self.reader.read(1024)
+            data = await self.reader.readline()
             if not data:
                 break
             # Если в переданных файлах есть файл, то определяем его начало и начинаем получать оставшуюся часть
             if '/file' in data.decode():
-                mes_with_file = data.decode().split('/file')
-                file_part_1 = mes_with_file[-1]
-                mes = mes_with_file[0]
-                print(mes)
                 file = await self._read_file()
                 # пишем в файл в отдельном потоке
-                await asyncio.to_thread(self._write_file, file_part_1.encode() + file)
+                await asyncio.to_thread(self._write_file, file)
             else:
                 print(data.decode())
 
@@ -55,7 +51,8 @@ class Client:
         while True:
             if self.read_task.done():
                 break
-            message = await aioconsole.ainput('>')
+            message = await aioconsole.ainput('>',)
+            message += '\n'  # добавляем разделитель, чтобы можно было контролировать получение на другой стороне.
             self.writer.write(message.encode())
             await self.writer.drain()
             # Если нужно отправить файл

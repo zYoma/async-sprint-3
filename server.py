@@ -46,9 +46,9 @@ class Server:
         _, client_id = writer.get_extra_info('peername')
         self.clients[client_id] = (reader, writer)
         # просим пользователя представиться
-        await self._send_data('Введите логин', client_id, from_user='server')
-        login = await reader.read(1024)
-        login = login.decode()
+        await self._send_data('Введите логин\n', client_id, from_user='server')
+        login = await reader.readline()
+        login = login.decode().strip()
         self.clients[login] = self.clients.pop(client_id)
 
         # Отправляет подключенному юзеру последние сообщения общего чата
@@ -86,7 +86,7 @@ class Server:
         _, writer = self.clients[client_id]
         # добавляем к сообщению id клиента
         data = f'({from_user}): {data}' if from_user else data
-        data += '\n'
+        # data += '\n'
         writer.write(data.encode())
         await writer.drain()
 
